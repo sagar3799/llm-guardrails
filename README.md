@@ -60,7 +60,11 @@ check_input(text)                         check_output(text)
   `protectai/deberta-v3-base-prompt-injection-v2`) + regex fallback, PII detection
   (Presidio + spaCy `en_core_web_lg`), regex-based secret/API-key detection, combined
   into `check_input()`. Verified to run fully offline (no network after first model
-  download).
+  download). `injection_detector.category_for()` reports `jailbreak` (not
+  `prompt_injection`) whenever only the regex fallback fires and the ML classifier
+  itself doesn't — found while reviewing an architecture diagram, since `policy.yaml`
+  had defined a `jailbreak` category from the start that no detector ever actually
+  produced.
 - **Phase 2** (output guardrails): toxicity classifier (ONNX, `unitary/toxic-bert`) +
   reused PII detector + reused secret detector, combined into `check_output()` — same
   `GuardResult` shape as `check_input()`.

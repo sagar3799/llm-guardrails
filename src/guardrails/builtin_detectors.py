@@ -7,21 +7,24 @@ not replacements."""
 from __future__ import annotations
 
 from guardrails.detector_base import DetectionSignal
-from guardrails.injection_detector import get_detector
+from guardrails.injection_detector import category_for, get_detector
 from guardrails.pii_detector import get_pii_detector
 from guardrails.secret_detector import get_secret_detector
 from guardrails.toxicity_detector import get_toxicity_detector
 
 
 class InjectionDetectorPlugin:
+    # Default/fallback label only — check() reports "jailbreak" instead whenever only
+    # the regex fallback fired, not the ML classifier. See injection_detector.category_for.
     category = "prompt_injection"
 
     def check(self, text: str) -> DetectionSignal:
         signal = get_detector().check(text)
+        category = category_for(signal.matched_rules) if signal.is_injection else self.category
         return DetectionSignal(
             triggered=signal.is_injection,
-            category=self.category,
-            reason=f"blocked: prompt_injection, confidence {signal.confidence:.2f}",
+            category=category,
+            reason=f"blocked: {category}, confidence {signal.confidence:.2f}",
             confidence=signal.confidence,
             matched_rules=signal.matched_rules,
         )

@@ -99,3 +99,13 @@ class InjectionDetector:
 def get_detector() -> InjectionDetector:
     """Process-wide singleton so the model is loaded/converted once, not per call."""
     return InjectionDetector()
+
+
+def category_for(matched_rules: list[str]) -> str:
+    """Distinguishes prompt_injection (the ML classifier itself fired, confidence over
+    threshold) from jailbreak (only the regex fallback caught a known phrasing) —
+    policy.yaml has always defined both as separate categories, but every caller used to
+    hardcode "prompt_injection" regardless of which signal actually fired, making the
+    jailbreak policy entry dead configuration. See docs/buildplan.md for how this was
+    found (a review of an architecture diagram, not a test) and README's Known gaps."""
+    return "prompt_injection" if "injection_classifier" in matched_rules else "jailbreak"

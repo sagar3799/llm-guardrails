@@ -4,7 +4,7 @@ import json
 import logging
 
 from guardrails.detector_base import DetectionSignal
-from guardrails.injection_detector import get_detector
+from guardrails.injection_detector import category_for, get_detector
 from guardrails.pii_anonymizer import get_pii_anonymizer
 from guardrails.pii_detector import get_pii_detector
 from guardrails.policy import PolicyEngine, get_policy_engine
@@ -77,6 +77,23 @@ def _combine(
     return result
 
 
+def _injection_trigger(text: str) -> DetectionSignal | None:
+    """category is prompt_injection when the ML classifier itself fired, jailbreak when
+    only the regex fallback caught a known phrasing — see
+    injection_detector.category_for for why this distinction used to be lost."""
+    injection_signal = get_detector().check(text)
+    if not injection_signal.is_injection:
+        return None
+    category = category_for(injection_signal.matched_rules)
+    return DetectionSignal(
+        triggered=True,
+        category=category,
+        reason=f"blocked: {category}, confidence {injection_signal.confidence:.2f}",
+        confidence=injection_signal.confidence,
+        matched_rules=injection_signal.matched_rules,
+    )
+
+
 def _pii_trigger(text: str) -> DetectionSignal | None:
     """Same Presidio wrapper for both input and output — different call site, no
     duplicated detection logic (see docs/buildplan.md, Phase 2)."""
@@ -120,17 +137,9 @@ def check_input(text: str) -> GuardResult:
     start = time.perf_counter()
     triggers: list[DetectionSignal] = []
 
-    injection_signal = get_detector().check(text)
-    if injection_signal.is_injection:
-        triggers.append(
-            DetectionSignal(
-                triggered=True,
-                category="prompt_injection",
-                reason=f"blocked: prompt_injection, confidence {injection_signal.confidence:.2f}",
-                confidence=injection_signal.confidence,
-                matched_rules=injection_signal.matched_rules,
-            )
-        )
+    injection_trigger = _injection_trigger(text)
+    if injection_trigger:
+        triggers.append(injection_trigger)
 
     pii_trigger = _pii_trigger(text)
     if pii_trigger:
