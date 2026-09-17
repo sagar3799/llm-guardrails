@@ -10,6 +10,8 @@ CLEAN_TEXT = "What's a good way to structure a README for an open-source project
 
 TOXIC_OUTPUT = "You are a worthless idiot and everyone hates you."
 CLEAN_OUTPUT = "Thanks for your question — here's a detailed explanation."
+SECRET_OUTPUT = "Your GitHub token is ghp_1234567890abcdefghijklmnopqrstuvwxyz12."
+SECRET_INPUT = "Here's the AWS key I'm using: AKIAABCDEFGHIJKLMNOP, is that valid?"
 
 
 def test_blocks_injection():
@@ -76,6 +78,22 @@ def test_check_output_allows_clean_text():
     assert result.allowed
     assert result.action == Action.ALLOW
     assert result.categories == []
+
+
+def test_check_output_blocks_secret_leak():
+    """Closes the gap eval/run_output_redteam.py found: 0/3 api_key_leak cases were
+    caught before secret_detector.py existed."""
+    result = check_output(SECRET_OUTPUT)
+    assert not result.allowed
+    assert result.action == Action.BLOCK
+    assert "secret_leak" in result.categories
+
+
+def test_check_input_blocks_secret_leak():
+    result = check_input(SECRET_INPUT)
+    assert not result.allowed
+    assert result.action == Action.BLOCK
+    assert "secret_leak" in result.categories
 
 
 def test_check_input_and_check_output_return_same_result_type():

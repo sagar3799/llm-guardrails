@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from guardrails.builtin_detectors import PiiDetectorPlugin, ToxicityDetectorPlugin
+from guardrails.builtin_detectors import (
+    PiiDetectorPlugin,
+    SecretDetectorPlugin,
+    ToxicityDetectorPlugin,
+)
 from guardrails.detector_base import Detector
 from guardrails.middleware import _combine
 from guardrails.policy import PolicyEngine
@@ -40,7 +44,11 @@ class StreamingGuard:
             raise ValueError("stride must be smaller than window_size for windows to overlap")
         self.window_size = window_size
         self.stride = stride
-        self.detectors = detectors if detectors is not None else [ToxicityDetectorPlugin(), PiiDetectorPlugin()]
+        self.detectors = (
+            detectors
+            if detectors is not None
+            else [ToxicityDetectorPlugin(), PiiDetectorPlugin(), SecretDetectorPlugin()]
+        )
         self.policy_engine = policy_engine
         self._buffer: list[str] = []
         self._tokens_since_last_check = 0

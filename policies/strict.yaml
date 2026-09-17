@@ -18,3 +18,7 @@ toxicity:
   high: block
   medium: block
   low: warn
+secret_leak:
+  high: block
+  medium: block
+  low: block

@@ -9,6 +9,7 @@ from guardrails.pii_anonymizer import get_pii_anonymizer
 from guardrails.pii_detector import get_pii_detector
 from guardrails.policy import PolicyEngine, get_policy_engine
 from guardrails.schemas import Action, GuardResult, Severity
+from guardrails.secret_detector import get_secret_detector
 from guardrails.toxicity_detector import get_toxicity_detector
 
 logger = logging.getLogger("guardrails")
@@ -92,8 +93,24 @@ def _pii_trigger(text: str) -> DetectionSignal | None:
     )
 
 
+def _secret_trigger(text: str) -> DetectionSignal | None:
+    """Same regex detector for both input and output — a pasted secret in a user's
+    prompt is as worth catching as one leaked in a generated response."""
+    secret_signal = get_secret_detector().check(text)
+    if not secret_signal.has_secret:
+        return None
+    return DetectionSignal(
+        triggered=True,
+        category="secret_leak",
+        reason=f"blocked: secret_leak, type={', '.join(secret_signal.matched_types)}",
+        confidence=secret_signal.confidence,
+        matched_rules=[f"secret:{t}" for t in secret_signal.matched_types],
+    )
+
+
 def check_input(text: str) -> GuardResult:
-    """Input-side guardrails: prompt injection/jailbreak detection + PII detection.
+    """Input-side guardrails: prompt injection/jailbreak detection, PII detection, and
+    secret/API-key detection.
 
     The simple, zero-config entry point — for a configurable set of detectors and/or a
     named policy pack, use GuardrailsEngine instead (see engine.py).
@@ -119,12 +136,17 @@ def check_input(text: str) -> GuardResult:
     if pii_trigger:
         triggers.append(pii_trigger)
 
+    secret_trigger = _secret_trigger(text)
+    if secret_trigger:
+        triggers.append(secret_trigger)
+
     latency_ms = (time.perf_counter() - start) * 1000
     return _combine(text, triggers, latency_ms)
 
 
 def check_output(text: str) -> GuardResult:
-    """Output-side guardrails: toxicity detection + PII leak detection."""
+    """Output-side guardrails: toxicity detection, PII leak detection, and
+    secret/API-key leak detection."""
     import time
 
     start = time.perf_counter()
@@ -145,6 +167,10 @@ def check_output(text: str) -> GuardResult:
     pii_trigger = _pii_trigger(text)
     if pii_trigger:
         triggers.append(pii_trigger)
+
+    secret_trigger = _secret_trigger(text)
+    if secret_trigger:
+        triggers.append(secret_trigger)
 
     latency_ms = (time.perf_counter() - start) * 1000
     return _combine(text, triggers, latency_ms)

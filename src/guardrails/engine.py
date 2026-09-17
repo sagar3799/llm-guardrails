@@ -15,6 +15,7 @@ import time
 from guardrails.builtin_detectors import (
     InjectionDetectorPlugin,
     PiiDetectorPlugin,
+    SecretDetectorPlugin,
     ToxicityDetectorPlugin,
 )
 from guardrails.detector_base import DetectionSignal, Detector
@@ -35,8 +36,8 @@ class GuardrailsEngine:
     def __init__(self, policy_name: str | None = None) -> None:
         self._policy_engine = get_policy_engine(policy_name)
         self._detectors: dict[str, list[Detector]] = {
-            "input": [InjectionDetectorPlugin(), PiiDetectorPlugin()],
-            "output": [ToxicityDetectorPlugin(), PiiDetectorPlugin()],
+            "input": [InjectionDetectorPlugin(), PiiDetectorPlugin(), SecretDetectorPlugin()],
+            "output": [ToxicityDetectorPlugin(), PiiDetectorPlugin(), SecretDetectorPlugin()],
         }
 
     def register_detector(self, detector: Detector, stage: str = "input") -> None:

@@ -21,3 +21,10 @@ toxicity:
   high: block
   medium: warn
   low: allow
+# secret_leak (API keys, tokens, private key blocks) is regex-only detection — either a
+# known pattern matches or it doesn't, so there's no real "medium/low confidence" case in
+# practice; block at every severity rather than pretend there's a spectrum to tune.
+secret_leak:
+  high: block
+  medium: block
+  low: block

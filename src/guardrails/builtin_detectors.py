@@ -9,6 +9,7 @@ from __future__ import annotations
 from guardrails.detector_base import DetectionSignal
 from guardrails.injection_detector import get_detector
 from guardrails.pii_detector import get_pii_detector
+from guardrails.secret_detector import get_secret_detector
 from guardrails.toxicity_detector import get_toxicity_detector
 
 
@@ -52,4 +53,18 @@ class ToxicityDetectorPlugin:
             reason=f"blocked: toxicity, confidence {signal.confidence:.2f}",
             confidence=signal.confidence,
             matched_rules=signal.matched_rules,
+        )
+
+
+class SecretDetectorPlugin:
+    category = "secret_leak"
+
+    def check(self, text: str) -> DetectionSignal:
+        signal = get_secret_detector().check(text)
+        return DetectionSignal(
+            triggered=signal.has_secret,
+            category=self.category,
+            reason=f"blocked: secret_leak, type={', '.join(signal.matched_types)}",
+            confidence=signal.confidence,
+            matched_rules=[f"secret:{t}" for t in signal.matched_types],
         )
