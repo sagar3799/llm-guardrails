@@ -28,6 +28,11 @@ Full design, rationale, and the review history behind every decision here live i
 | Latency benchmark (reproducible, hardware-reported) | ✅ |
 | CI | ⏭️ deliberately skipped ([why](#whats-not-here-and-why)) |
 
+![Architecture: input/output guardrails, policy engine, GuardResult](docs/images/architecture-overview.svg)
+
+<details>
+<summary>Text version (if the diagram doesn't render)</summary>
+
 ```
 Input Guardrails                          Output Guardrails
 ------------------                        -------------------
@@ -46,6 +51,8 @@ check_input(text)                         check_output(text)
               GuardResult(allowed, action, severity, risk_score,
                            sanitized_text, categories, matched_rules)
 ```
+
+</details>
 
 ## Details
 
@@ -120,6 +127,9 @@ check_input(text)                         check_output(text)
   via `get_policy_engine("healthcare")` or `GuardrailsEngine(policy_name="healthcare")`.
   The FastAPI demo exposes this directly — `POST /chat` with
   `{"message": "...", "policy": "healthcare"}` uses it.
+
+  ![Extensibility: detector plugins and policy packs flowing through GuardrailsEngine](docs/images/extensibility.svg)
+
 - **Cross-policy behavioral eval**: `eval/run_policy_comparison.py` runs the same 25
   red-team cases through all four policy packs — see
   [eval/policy_comparison.md](eval/policy_comparison.md). Catch rate and
