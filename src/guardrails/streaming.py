@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from guardrails.detector_base import DetectionSignal
 from guardrails.middleware import _combine, _pii_trigger
 from guardrails.schemas import GuardResult
 from guardrails.toxicity_detector import get_toxicity_detector
@@ -44,13 +45,12 @@ class StreamingGuard:
         return self._check_window(window_text)
 
     def _check_window(self, window_text: str) -> list[GuardResult]:
-        triggers = []
+        triggers: list[DetectionSignal] = []
         toxicity_signal = get_toxicity_detector().check(window_text)
         if toxicity_signal.is_toxic:
-            from guardrails.middleware import _Trigger
-
             triggers.append(
-                _Trigger(
+                DetectionSignal(
+                    triggered=True,
                     category="toxicity",
                     reason=f"blocked: toxicity, confidence {toxicity_signal.confidence:.2f}",
                     confidence=toxicity_signal.confidence,

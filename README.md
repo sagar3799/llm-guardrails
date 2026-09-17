@@ -65,6 +65,21 @@ check_input(text)                         check_output(text)
   endpoint wrapping a fake LLM call in `check_input()`/`check_output()`, smoke-tested
   end-to-end (clean / injection / PII cases). **CI and the LangGraph demo wrapper were
   deliberately skipped** — see "What's not here" below.
+- **Pluggable detector interface**: `Detector` is a `Protocol` (not an ABC) — any object
+  with a `check(text) -> DetectionSignal` method can be registered on a
+  `GuardrailsEngine` via `register_detector(my_detector, stage="input"|"output")`, no
+  subclassing required. The three built-ins are wrapped as plugins
+  (`InjectionDetectorPlugin`, `PiiDetectorPlugin`, `ToxicityDetectorPlugin`) in
+  `src/guardrails/builtin_detectors.py`, proving the interface with real detectors, not
+  just a toy example. `check_input()`/`check_output()` in `middleware.py` are unaffected
+  and remain the simple, zero-config entry point.
+- **Versioned policy packs**: `policy.yaml` at the repo root stays the zero-config
+  default; `policies/strict.yaml`, `policies/healthcare.yaml`, and
+  `policies/enterprise.yaml` are named alternatives with genuinely different tradeoffs
+  (e.g. `pii.low` is `warn` by default, `block` under `healthcare`, `block` under
+  `strict`), selected via `get_policy_engine("healthcare")` or
+  `GuardrailsEngine(policy_name="healthcare")`. The FastAPI demo exposes this directly —
+  `POST /chat` with `{"message": "...", "policy": "healthcare"}` uses it.
 
 ## What's not here (and why)
 

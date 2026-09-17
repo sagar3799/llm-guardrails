@@ -1,0 +1,21 @@
+# Enterprise/internal-tool policy pack: mirrors the project's default balanced policy
+# (policy.yaml at the repo root), named explicitly so a deployment can pin to
+# "enterprise" even if the root default changes later. See README: "Versioned policy
+# packs". Load with get_policy_engine("enterprise") or
+# GuardrailsEngine(policy_name="enterprise").
+prompt_injection:
+  high: block
+  medium: block
+  low: warn
+jailbreak:
+  high: block
+  medium: block
+  low: warn
+pii:
+  high: anonymize
+  medium: anonymize
+  low: warn
+toxicity:
+  high: block
+  medium: warn
+  low: allow
