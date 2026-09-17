@@ -26,7 +26,7 @@ check_input(text)                         check_output(text)
                            sanitized_text, categories, matched_rules)
 ```
 
-## Status: all phases built and tested (45/45 tests passing, `ruff` clean)
+## Status: all phases built and tested (49/49 tests passing, `ruff` clean)
 
 - **Phase 1** (input guardrails): prompt injection/jailbreak classifier (ONNX,
   `protectai/deberta-v3-base-prompt-injection-v2`) + regex fallback, PII detection
@@ -80,6 +80,25 @@ check_input(text)                         check_output(text)
   `strict`), selected via `get_policy_engine("healthcare")` or
   `GuardrailsEngine(policy_name="healthcare")`. The FastAPI demo exposes this directly —
   `POST /chat` with `{"message": "...", "policy": "healthcare"}` uses it.
+- **Cross-policy behavioral eval**: `eval/run_policy_comparison.py` runs the same 25
+  red-team cases through all four policy packs — see
+  [eval/policy_comparison.md](eval/policy_comparison.md). Catch rate and
+  false-positive rate stay flat across policies (expected — policies never change
+  whether detection fires), so the report also measures **hard-block rate**, which
+  actually differs: attacks resolve to a hard `block` 67% of the time under
+  `default`/`enterprise` (PII gets anonymized, not blocked) vs. **100%** under
+  `strict`/`healthcare`. The same split shows up on benign inputs — 30% vs. 40%
+  hard-blocked — which is the real, measured cost of each policy's tradeoff, not just
+  the tradeoff as designed in YAML.
+- **Streaming now shares the plugin registry**: `GuardrailsEngine.create_streaming_guard()`
+  builds a `StreamingGuard` from the engine's own registered detectors and policy pack,
+  so a custom detector registered via `register_detector(d, stage="output")` is picked
+  up by the streaming path too — closing the gap noted below in earlier revisions.
+  Constructing `StreamingGuard()` directly still works with the same built-in defaults
+  as before.
+- **Latency reproducibility**: `eval/run_latency.py` reports p50/p95/mean warm latency,
+  cold start, and the hardware it ran on (stdlib-only, no new dependency) — so the
+  numbers above can be checked against different hardware, not just taken on faith.
 
 ## What's not here (and why)
 
@@ -91,16 +110,13 @@ check_input(text)                         check_output(text)
 
 ## Known gaps (stated honestly, not hidden)
 
-- **`StreamingGuard` (Phase 5) doesn't go through the pluggable detector interface.** It
-  still calls the toxicity/PII detectors directly, so a custom detector registered on
-  `GuardrailsEngine` is invisible to the streaming path. The two were built in different
-  passes and were never unified — worth closing if this project keeps growing.
-- **The red-team eval only covers the default `policy.yaml` against `check_input()`.**
-  It does not run against `check_output()`, nor against the named policy packs
-  (`strict`/`healthcare`/`enterprise`) — the catch-rate and false-positive-rate numbers
-  above describe the default policy only. `test_policy_packs.py` and `test_engine.py`
-  unit-test the packs' logic directly, but there's no red-team-style behavioral eval of
-  them yet.
+- ~~`StreamingGuard` doesn't go through the pluggable detector interface~~ — **closed**:
+  see `GuardrailsEngine.create_streaming_guard()` above.
+- **The red-team eval (`eval/results.md`) still only covers `check_input()`.**
+  `eval/run_policy_comparison.py` now covers all four policy packs (see above), but
+  nothing red-teams `check_output()` specifically — toxicity/PII-leak false positives on
+  generated text are untested by the red-team suite (unit-tested individually in
+  `test_toxicity_detector.py`/`test_pii_detector.py`, but not as a behavioral eval).
 
 ## Setup
 
@@ -120,7 +136,9 @@ pytest -q
 ## Running the eval / demos
 
 ```bash
-python eval/run_redteam.py            # writes eval/results.md
-python demo/streaming_validation.py   # writes demo/streaming_results.md
+python eval/run_redteam.py              # writes eval/results.md
+python eval/run_policy_comparison.py    # writes eval/policy_comparison.md
+python eval/run_latency.py              # prints p50/p95/mean + hardware info
+python demo/streaming_validation.py     # writes demo/streaming_results.md
 uvicorn examples.fastapi_app:app --reload   # then POST to /chat
 ```

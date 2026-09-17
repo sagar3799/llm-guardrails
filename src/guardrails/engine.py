@@ -21,6 +21,7 @@ from guardrails.detector_base import DetectionSignal, Detector
 from guardrails.middleware import _combine
 from guardrails.policy import get_policy_engine
 from guardrails.schemas import GuardResult
+from guardrails.streaming import StreamingGuard
 
 VALID_STAGES = ("input", "output")
 
@@ -55,3 +56,16 @@ class GuardrailsEngine:
         triggers = [s for s in signals if s.triggered]
         latency_ms = (time.perf_counter() - start) * 1000
         return _combine(text, triggers, latency_ms, policy_engine=self._policy_engine)
+
+    def create_streaming_guard(self, window_size: int = 40, stride: int = 20) -> StreamingGuard:
+        """Builds a StreamingGuard that shares this engine's own registered output
+        detectors and policy pack — so a custom detector registered here via
+        register_detector(d, stage="output") is picked up by streaming too, closing the
+        gap where the two execution paths used to diverge (docs/buildplan.md,
+        Revision 6, known gap 1)."""
+        return StreamingGuard(
+            window_size=window_size,
+            stride=stride,
+            detectors=list(self._detectors["output"]),
+            policy_engine=self._policy_engine,
+        )

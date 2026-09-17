@@ -1,18 +1,27 @@
 from __future__ import annotations
 
-from guardrails.detector_base import DetectionSignal
-from guardrails.middleware import _combine, _pii_trigger
+from guardrails.builtin_detectors import PiiDetectorPlugin, ToxicityDetectorPlugin
+from guardrails.detector_base import Detector
+from guardrails.middleware import _combine
+from guardrails.policy import PolicyEngine
 from guardrails.schemas import GuardResult
-from guardrails.toxicity_detector import get_toxicity_detector
 
 
 class StreamingGuard:
     """Reusable sliding-window guard for token-by-token (streaming) output.
 
     Buffering the full response before checking it defeats time-to-first-token in any
-    real streaming LLM app — see docs/buildplan.md, Phase 5. This runs the toxicity/PII
-    checks on an overlapping window of the last `window_size` tokens, re-evaluated every
-    `stride` tokens, instead of waiting for the full response.
+    real streaming LLM app — see docs/buildplan.md, Phase 5. This runs the registered
+    detectors on an overlapping window of the last `window_size` tokens, re-evaluated
+    every `stride` tokens, instead of waiting for the full response.
+
+    Uses the same Detector protocol as GuardrailsEngine (detector_base.py) — pass
+    `detectors`/`policy_engine` explicitly, or build one via
+    `GuardrailsEngine.create_streaming_guard()` to automatically reuse that engine's own
+    registered detectors and policy pack. Constructing a StreamingGuard directly with no
+    arguments still works and defaults to the same built-in toxicity+PII checks as
+    before — this unification didn't change default behavior, just where the detector
+    list comes from.
 
     Scope, stated honestly (docs/buildplan.md, Phase 5): this demonstrates the approach
     and its tradeoffs on a simulated token stream — it is not wired to a real LLM's
@@ -20,11 +29,19 @@ class StreamingGuard:
     operates on whitespace-delimited tokens, not real subword tokens).
     """
 
-    def __init__(self, window_size: int = 40, stride: int = 20) -> None:
+    def __init__(
+        self,
+        window_size: int = 40,
+        stride: int = 20,
+        detectors: list[Detector] | None = None,
+        policy_engine: PolicyEngine | None = None,
+    ) -> None:
         if stride >= window_size:
             raise ValueError("stride must be smaller than window_size for windows to overlap")
         self.window_size = window_size
         self.stride = stride
+        self.detectors = detectors if detectors is not None else [ToxicityDetectorPlugin(), PiiDetectorPlugin()]
+        self.policy_engine = policy_engine
         self._buffer: list[str] = []
         self._tokens_since_last_check = 0
 
@@ -45,25 +62,11 @@ class StreamingGuard:
         return self._check_window(window_text)
 
     def _check_window(self, window_text: str) -> list[GuardResult]:
-        triggers: list[DetectionSignal] = []
-        toxicity_signal = get_toxicity_detector().check(window_text)
-        if toxicity_signal.is_toxic:
-            triggers.append(
-                DetectionSignal(
-                    triggered=True,
-                    category="toxicity",
-                    reason=f"blocked: toxicity, confidence {toxicity_signal.confidence:.2f}",
-                    confidence=toxicity_signal.confidence,
-                    matched_rules=toxicity_signal.matched_rules,
-                )
-            )
-        pii_trigger = _pii_trigger(window_text)
-        if pii_trigger:
-            triggers.append(pii_trigger)
-
+        signals = [d.check(window_text) for d in self.detectors]
+        triggers = [s for s in signals if s.triggered]
         if not triggers:
             return []
-        return [_combine(window_text, triggers, latency_ms=0.0)]
+        return [_combine(window_text, triggers, latency_ms=0.0, policy_engine=self.policy_engine)]
 
     def flush(self) -> list[GuardResult]:
         """Check whatever remains in the buffer at end-of-stream, even if it never hit

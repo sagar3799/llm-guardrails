@@ -80,3 +80,35 @@ def test_engine_with_healthcare_policy_blocks_pii_instead_of_anonymizing():
     result = engine.check_input("My email is sagar.meena@example.com.")
     assert result.action == Action.BLOCK
     assert not result.allowed
+
+
+def test_create_streaming_guard_uses_registered_custom_detector():
+    """Closes docs/buildplan.md Revision 6's known gap: a detector registered on the
+    engine used to be invisible to StreamingGuard, since streaming hardcoded its own
+    detector list. create_streaming_guard() shares the engine's own list instead."""
+    engine = GuardrailsEngine()
+    engine.register_detector(KeywordDetector("forbidden-word"), stage="output")
+
+    guard = engine.create_streaming_guard(window_size=6, stride=3)
+    results = []
+    for token in ["this", "response", "contains", "the", "forbidden-word", "right", "here", "today"]:
+        results.extend(guard.feed(token))
+    results.extend(guard.flush())
+
+    assert any("custom_keyword" in r.categories for r in results)
+
+
+def test_create_streaming_guard_shares_engines_policy():
+    """healthcare hard-blocks PII instead of anonymizing it (see test_policy_packs.py)
+    — this proves create_streaming_guard() actually shares that policy, not just the
+    default. window_size is larger than the token count so feed() never reaches a full
+    window on its own; flush() checks whatever's buffered at end-of-stream regardless."""
+    engine = GuardrailsEngine(policy_name="healthcare")
+    guard = engine.create_streaming_guard(window_size=20, stride=10)
+
+    results = []
+    for token in ["My", "email", "is", "sagar.meena@example.com", "and", "I", "need", "help"]:
+        results.extend(guard.feed(token))
+    results.extend(guard.flush())
+
+    assert any(r.action == Action.BLOCK and "pii" in r.categories for r in results)
