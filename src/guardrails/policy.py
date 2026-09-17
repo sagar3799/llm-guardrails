@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 import yaml
@@ -8,6 +8,10 @@ import yaml
 from guardrails.schemas import Action, Severity
 
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent.parent / "policy.yaml"
+# Named policy packs (strict/enterprise/healthcare/...) live under policies/<name>.yaml
+# — see README: "Versioned policy packs". The root policy.yaml stays the zero-config
+# default; packs are opt-in via get_policy_engine("<name>").
+POLICIES_DIR = Path(__file__).resolve().parent.parent.parent / "policies"
 
 # BLOCK > ANONYMIZE > WARN > ALLOW — most-restrictive wins, always.
 # See docs/buildplan.md, Revision 4 item 2: without this fixed order, an input tripping
@@ -24,7 +28,7 @@ _ACTION_PRIORITY = {
 class PolicyEngine:
     """Maps (category, severity) -> Action via a configurable policy.yaml.
 
-    Severity is a pure model output (see schemas.Severity / middleware._severity_from_score)
+    Severity is a pure model output (see schemas.Severity / detector_base.severity_from_score)
     — this class only encodes business policy: what to DO about a given severity, and
     that can differ per category (docs/buildplan.md, Revision 5 item 1). Keep the
     per-category lookup dumb on purpose — a dict with a default — the interesting part is
@@ -48,6 +52,11 @@ class PolicyEngine:
         return max(actions, key=lambda a: _ACTION_PRIORITY[a])
 
 
-@lru_cache(maxsize=1)
-def get_policy_engine() -> PolicyEngine:
-    return PolicyEngine()
+@cache
+def get_policy_engine(name: str | None = None) -> PolicyEngine:
+    """name=None (default) loads the root policy.yaml — unchanged, zero-config behavior.
+    Pass a pack name (e.g. "strict", "healthcare", "enterprise") to load
+    policies/<name>.yaml instead. Cached per name, same as before for the default case."""
+    if name is None:
+        return PolicyEngine(DEFAULT_POLICY_PATH)
+    return PolicyEngine(POLICIES_DIR / f"{name}.yaml")

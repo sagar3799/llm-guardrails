@@ -2,40 +2,18 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 
+from guardrails.detector_base import DetectionSignal
 from guardrails.injection_detector import get_detector
 from guardrails.pii_anonymizer import get_pii_anonymizer
 from guardrails.pii_detector import get_pii_detector
-from guardrails.policy import get_policy_engine
+from guardrails.policy import PolicyEngine, get_policy_engine
 from guardrails.schemas import Action, GuardResult, Severity
 from guardrails.toxicity_detector import get_toxicity_detector
 
 logger = logging.getLogger("guardrails")
 
 _SEVERITY_RANK = {Severity.LOW: 0, Severity.MEDIUM: 1, Severity.HIGH: 2}
-
-
-def _severity_from_score(score: float) -> Severity:
-    # Fixed thresholds, model output only — see docs/buildplan.md, Revision 5 item 1.
-    # PolicyEngine decides the *action* per category from this; this function never does.
-    if score >= 0.8:
-        return Severity.HIGH
-    if score >= 0.5:
-        return Severity.MEDIUM
-    return Severity.LOW
-
-
-@dataclass
-class _Trigger:
-    category: str
-    reason: str
-    confidence: float
-    matched_rules: list[str] = field(default_factory=list)
-
-    @property
-    def severity(self) -> Severity:
-        return _severity_from_score(self.confidence)
 
 
 def _log_if_notable(result: GuardResult, latency_ms: float) -> None:
@@ -55,20 +33,30 @@ def _log_if_notable(result: GuardResult, latency_ms: float) -> None:
     )
 
 
-def _combine(text: str, triggers: list[_Trigger], latency_ms: float) -> GuardResult:
-    """Shared by check_input/check_output so both return the same GuardResult shape.
+def _combine(
+    text: str,
+    triggers: list[DetectionSignal],
+    latency_ms: float,
+    policy_engine: PolicyEngine | None = None,
+) -> GuardResult:
+    """Shared by check_input/check_output (and GuardrailsEngine) so all of them return
+    the same GuardResult shape.
 
     Action comes from the PolicyEngine (category + severity -> action, configurable via
-    policy.yaml), with BLOCK > ANONYMIZE > WARN > ALLOW conflict resolution across
-    categories when more than one triggers on the same input (Revision 4, item 2).
+    policy.yaml or a named pack under policies/), with BLOCK > ANONYMIZE > WARN > ALLOW
+    conflict resolution across categories when more than one triggers on the same input
+    (Revision 4, item 2). `policy_engine` defaults to the root policy.yaml — pass a
+    different one (e.g. get_policy_engine("healthcare")) to use a named pack instead.
     """
+    policy_engine = policy_engine or get_policy_engine()
+
     if not triggers:
         result = GuardResult(allowed=True, action=Action.ALLOW, severity=Severity.LOW)
         _log_if_notable(result, latency_ms)
         return result
 
     category_severities = [(t.category, t.severity) for t in triggers]
-    action = get_policy_engine().decide(category_severities)
+    action = policy_engine.decide(category_severities)
     risk_score = max(t.confidence for t in triggers)
     overall_severity = max((sev for _, sev in category_severities), key=lambda s: _SEVERITY_RANK[s])
 
@@ -88,14 +76,15 @@ def _combine(text: str, triggers: list[_Trigger], latency_ms: float) -> GuardRes
     return result
 
 
-def _pii_trigger(text: str) -> _Trigger | None:
+def _pii_trigger(text: str) -> DetectionSignal | None:
     """Same Presidio wrapper for both input and output — different call site, no
     duplicated detection logic (see docs/buildplan.md, Phase 2)."""
     pii_signal = get_pii_detector().check(text)
     if not pii_signal.has_pii:
         return None
     entity_list = ", ".join(pii_signal.entity_types)
-    return _Trigger(
+    return DetectionSignal(
+        triggered=True,
         category="pii",
         reason=f"flagged: pii_detected, type={entity_list}",
         confidence=pii_signal.confidence,
@@ -104,16 +93,21 @@ def _pii_trigger(text: str) -> _Trigger | None:
 
 
 def check_input(text: str) -> GuardResult:
-    """Input-side guardrails: prompt injection/jailbreak detection + PII detection."""
+    """Input-side guardrails: prompt injection/jailbreak detection + PII detection.
+
+    The simple, zero-config entry point — for a configurable set of detectors and/or a
+    named policy pack, use GuardrailsEngine instead (see engine.py).
+    """
     import time
 
     start = time.perf_counter()
-    triggers: list[_Trigger] = []
+    triggers: list[DetectionSignal] = []
 
     injection_signal = get_detector().check(text)
     if injection_signal.is_injection:
         triggers.append(
-            _Trigger(
+            DetectionSignal(
+                triggered=True,
                 category="prompt_injection",
                 reason=f"blocked: prompt_injection, confidence {injection_signal.confidence:.2f}",
                 confidence=injection_signal.confidence,
@@ -134,12 +128,13 @@ def check_output(text: str) -> GuardResult:
     import time
 
     start = time.perf_counter()
-    triggers: list[_Trigger] = []
+    triggers: list[DetectionSignal] = []
 
     toxicity_signal = get_toxicity_detector().check(text)
     if toxicity_signal.is_toxic:
         triggers.append(
-            _Trigger(
+            DetectionSignal(
+                triggered=True,
                 category="toxicity",
                 reason=f"blocked: toxicity, confidence {toxicity_signal.confidence:.2f}",
                 confidence=toxicity_signal.confidence,

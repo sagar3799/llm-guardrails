@@ -1,0 +1,20 @@
+# Zero-tolerance policy pack: block on any real signal, no anonymize/allow leniency.
+# Suited to a high-risk deployment where a false negative is far costlier than a false
+# positive — the opposite tradeoff from the default balanced policy.yaml at the repo
+# root. Load with get_policy_engine("strict") or GuardrailsEngine(policy_name="strict").
+prompt_injection:
+  high: block
+  medium: block
+  low: block
+jailbreak:
+  high: block
+  medium: block
+  low: block
+pii:
+  high: block
+  medium: block
+  low: block
+toxicity:
+  high: block
+  medium: block
+  low: warn
