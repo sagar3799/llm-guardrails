@@ -26,7 +26,7 @@ check_input(text)                         check_output(text)
                            sanitized_text, categories, matched_rules)
 ```
 
-## Status: all phases built and tested
+## Status: all phases built and tested (45/45 tests passing, `ruff` clean)
 
 - **Phase 1** (input guardrails): prompt injection/jailbreak classifier (ONNX,
   `protectai/deberta-v3-base-prompt-injection-v2`) + regex fallback, PII detection
@@ -88,6 +88,19 @@ check_input(text)                         check_output(text)
   resume-ready claim, and isn't claimed anywhere in this README or the resume lines.
 - **LangGraph demo wrapper**: deferred — it wraps a separate project's real code and
   wasn't needed to reach a complete, tested state here.
+
+## Known gaps (stated honestly, not hidden)
+
+- **`StreamingGuard` (Phase 5) doesn't go through the pluggable detector interface.** It
+  still calls the toxicity/PII detectors directly, so a custom detector registered on
+  `GuardrailsEngine` is invisible to the streaming path. The two were built in different
+  passes and were never unified — worth closing if this project keeps growing.
+- **The red-team eval only covers the default `policy.yaml` against `check_input()`.**
+  It does not run against `check_output()`, nor against the named policy packs
+  (`strict`/`healthcare`/`enterprise`) — the catch-rate and false-positive-rate numbers
+  above describe the default policy only. `test_policy_packs.py` and `test_engine.py`
+  unit-test the packs' logic directly, but there's no red-team-style behavioral eval of
+  them yet.
 
 ## Setup
 

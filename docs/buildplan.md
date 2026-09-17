@@ -584,7 +584,56 @@ missing feature — don't let an interviewer read it as an oversight.
 
 ---
 
-**Plan status: locked for build.** Five review passes (Revision 1 baseline, then
-Revisions 2-5) have converged — no open questions remain. Build in the order Phase 1 →
-2 → 2.5 → 3 → 5 → 4, treating Phase 3 as the safe floor and Phase 5 as the differentiator,
-whenever time allows starting.
+## Revision 6 — post-launch additions (built, tested, merged)
+
+Everything through Phase 5 was actually built, not just planned — see README.md for
+final headline numbers (100% catch rate, 40% false-positive rate, 39.6ms mean / 164.9ms
+p95 latency, 45/45 tests passing). Two more items were added after Revision 5's "locked"
+call, from a further external review round, and both survived the same good/useless
+triage as everything before them.
+
+**1. Pluggable detector interface (`Detector` Protocol + `GuardrailsEngine`).**
+- Why kept: the three built-in detectors already shared a de facto common shape
+  (confidence + matched_rules + a triggered flag) — formalizing that into a real
+  `Detector` Protocol and a `register_detector()` hook was cheap (a few hours) and turns
+  "three detectors" into "an extensible SDK a team could plug their own detector into,"
+  a materially stronger interview claim than the same three detectors left as fixed
+  internal classes.
+- What shipped: `src/guardrails/detector_base.py` (the Protocol + a shared
+  `DetectionSignal` type, which also absorbed the `severity_from_score` logic that used
+  to live privately in `middleware.py`), `src/guardrails/builtin_detectors.py` (the three
+  built-ins wrapped as real plugins, not a toy example), `src/guardrails/engine.py`
+  (`GuardrailsEngine`). `check_input()`/`check_output()` in `middleware.py` are
+  unaffected and remain the zero-config entry point.
+- **Known gap, stated honestly: `StreamingGuard` (Phase 5) does not route through this**
+  — it still calls the toxicity/PII detectors directly, so a custom detector registered
+  on `GuardrailsEngine` is invisible to the streaming path. Worth closing if this project
+  keeps growing; left open here rather than re-opening "final" scope for it.
+
+**2. Versioned policy packs (`policies/strict.yaml`, `healthcare.yaml`, `enterprise.yaml`).**
+- Why kept: `PolicyEngine` already took a `policy_path` constructor argument — multi-policy
+  support was structurally free, it just needed named files and a selection mechanism.
+  It's also the single strongest complement to the project's core "severity is model
+  output, action is business policy" narrative: the same PII detection blocks under
+  `healthcare` but only anonymizes under the default.
+- What shipped: three genuinely different packs, not renamed copies of each other (see
+  `test_policy_packs.py` for the specific action differences), `get_policy_engine(name)`,
+  `GuardrailsEngine(policy_name=...)`, and a `"policy"` field on the FastAPI demo so the
+  one live endpoint exercises this directly.
+- **Known gap, stated honestly: `eval/run_redteam.py` only ever evaluates the default
+  `policy.yaml` against `check_input()`.** The red-team suite does not run against
+  `check_output()`, nor against the named policy packs. The catch-rate / false-positive-
+  rate numbers in `eval/results.md` describe the default policy only.
+
+**Discarded from the same review round:** a benchmark CLI (deprioritized — the
+underlying capability already exists via `run_redteam.py`; wrapping it in `argparse`
+would be polish, not new capability) and OpenTelemetry integration (real scope creep —
+it needs a running collector/Grafana/Datadog to mean anything, and demonstrates generic
+infra plumbing rather than anything about detection or policy, which is what this
+project exists to prove).
+
+---
+
+**Plan status: shipped.** All phases through 5 are built, tested, and merged, plus the
+two additions above. The two "known gap" notes are the honest next things to close if
+this project keeps growing — not blockers, and not hidden.
