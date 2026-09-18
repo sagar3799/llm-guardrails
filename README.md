@@ -11,7 +11,7 @@ Full design, rationale, and the review history behind every decision here live i
 
 ## At a glance
 
-**58/58 tests passing, `ruff` clean.**
+**64/64 tests passing, `ruff` clean.**
 
 | Capability | Status |
 |---|---|
@@ -82,7 +82,7 @@ check_input(text)                         check_output(text)
   table**, not hidden: three are inherent limitations of the pretrained injection
   classifier's phrasing sensitivity, one is spaCy's NER tagging a fictional character
   name ("Romeo", "Juliet") as PERSON, same as it would a real name. **Latency
-  (steady-state): mean 39.6ms, p95 164.9ms per `check_input()` call. Cold start
+  (steady-state): mean 43.5ms, p95 191.3ms per `check_input()` call. Cold start
   (one-time model load per process): ~9s** — reported separately since it's not a
   per-request cost.
 - **Red-team eval, output**: `eval/run_output_redteam.py`, 18 cases across toxic
@@ -186,6 +186,11 @@ python -m spacy download en_core_web_lg
 ```bash
 pytest -q
 ```
+
+`tests/test_readme_sync.py` fails if this README drifts from the code: the test count,
+every file path mentioned, the case counts, and the headline numbers (catch/false-positive
+rates, latency) must match the test suite and the committed `eval/*.md` results. If you
+re-run an eval and its numbers change, that test tells you which README line to update.
 
 **First run needs internet access.** The injection and toxicity classifiers
 (`protectai/deberta-v3-base-prompt-injection-v2`, `unitary/toxic-bert`) are downloaded

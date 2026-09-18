@@ -1,5 +1,14 @@
 # Project: LLM Guardrails / Safety Middleware
 
+> **Historical planning record — not the current state of the project.** This document
+> captures the design decisions and review rounds up to Revision 6. Several things it
+> lists as open or planned have since been built or changed (secret/API-key detection,
+> output red-team eval, cross-policy eval, streaming now sharing the plugin registry,
+> the `jailbreak` vs `prompt_injection` category fix, test count now higher than the
+> "45/45" quoted below). **[README.md](../README.md) is authoritative for what exists
+> today**, including current numbers and known gaps; this file explains *why* the design
+> is shaped the way it is.
+
 **New repo, separate from all three existing projects.** Different purpose, different codebase.
 
 **What this proves that Projects 1-3 don't:** Project 1 proves you can build an agent.

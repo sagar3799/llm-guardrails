@@ -106,6 +106,6 @@ def category_for(matched_rules: list[str]) -> str:
     threshold) from jailbreak (only the regex fallback caught a known phrasing) —
     policy.yaml has always defined both as separate categories, but every caller used to
     hardcode "prompt_injection" regardless of which signal actually fired, making the
-    jailbreak policy entry dead configuration. See docs/buildplan.md for how this was
-    found (a review of an architecture diagram, not a test) and README's Known gaps."""
+    jailbreak policy entry unreachable. Regression-tested in test_pipeline.py and
+    test_engine.py (both code paths)."""
     return "prompt_injection" if "injection_classifier" in matched_rules else "jailbreak"
