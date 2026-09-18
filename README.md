@@ -11,7 +11,7 @@ Full design, rationale, and the review history behind every decision here live i
 
 ## At a glance
 
-**55/55 tests passing, `ruff` clean.**
+**58/58 tests passing, `ruff` clean.**
 
 | Capability | Status |
 |---|---|
@@ -186,6 +186,14 @@ python -m spacy download en_core_web_lg
 ```bash
 pytest -q
 ```
+
+**First run needs internet access.** The injection and toxicity classifiers
+(`protectai/deberta-v3-base-prompt-injection-v2`, `unitary/toxic-bert`) are downloaded
+from Hugging Face and converted to ONNX once, then cached locally (`.onnx_cache/` and the
+Hugging Face cache) — expect a few minutes the first time. After that everything runs
+fully offline. In an environment that blocks huggingface.co, the ~35 tests that load
+those models will error out; the rest (policy engine, secret detector, PII anonymizer,
+etc.) don't need them and pass regardless.
 
 ## Running the eval / demos
 
